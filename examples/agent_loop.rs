@@ -1,4 +1,4 @@
-use agent_line::{Agent, Ctx, Outcome, Runner, StepResult, Workflow};
+use agent_line::{Agent, Ctx, Outcome, RetryHint, Runner, StepResult, Workflow};
 
 #[derive(Clone, Debug)]
 struct Doc {
@@ -53,16 +53,17 @@ impl Agent<Doc> for Validator {
     }
 }
 
-struct Fixer;
+struct Fixer {
+    retried: bool,
+}
+
 impl Agent<Doc> for Fixer {
     fn name(&self) -> &'static str {
         "fixer"
     }
     fn run(&mut self, mut state: Doc, ctx: &mut Ctx) -> StepResult<Doc> {
         // Collect logs first, then clear. Reading logs() borrows &self,
-        // but we need &mut self to clear — so we clone into a Vec first.
         let entries: Vec<String> = ctx.logs().to_vec();
-        ctx.clear_logs();
 
         for entry in &entries {
             if entry.contains("wrold") {
@@ -75,7 +76,14 @@ impl Agent<Doc> for Fixer {
             }
         }
 
-        Ok((state, Outcome::Next("validator")))
+        if !self.retried {
+            self.retried = true;
+            ctx.log("fixer: retrying to double-check fixes");
+            Ok((state, Outcome::Retry(RetryHint::new("double-checking"))))
+        } else {
+            self.retried = false;
+            Ok((state, Outcome::Next("validator")))
+        }
     }
 }
 
@@ -86,25 +94,27 @@ fn main() {
         Workflow::builder("edit-loop")
             .register(Writer)
             .register(Validator)
-            .register(Fixer)
+            .register(Fixer { retried: false })
             .start_at("writer")
             .then("validator")
             .build()
             .unwrap(),
     );
 
+    let mut revision = 0;
     for round in 1..=3 {
         println!("=== Round {round} ===");
 
         let doc = Doc {
             text: String::new(),
-            revision: 0,
+            revision,
         };
 
         match runner.run(doc, &mut ctx) {
             Ok(doc) => {
                 println!("  Final text: {:?}", doc.text);
                 println!("  Revisions:  {}", doc.revision);
+                revision = doc.revision;
             }
             Err(e) => println!("  Error: {e}"),
         }
