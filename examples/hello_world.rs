@@ -12,15 +12,15 @@ impl Agent<State> for AddOne {
         "add_one"
     }
 
-    fn run(&mut self, state: State, _ctx: &Ctx) -> StepResult<State> {
+    fn run(&mut self, state: State, _ctx: &mut Ctx) -> StepResult<State> {
         let next = State { n: state.n + 1 };
         Ok((next, Outcome::Done))
     }
 }
 
 fn main() {
-    let ctx = Ctx;
+    let mut ctx = Ctx::new();
     let mut agent = AddOne;
-    let (state, out) = agent.run(State { n: 1 }, &ctx).unwrap();
+    let (state, out) = agent.run(State { n: 1 }, &mut ctx).unwrap();
     println!("state.n={} outcome={out:?}", state.n);
 }

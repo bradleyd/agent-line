@@ -7,7 +7,7 @@ pub type StepResult<S> = Result<(S, Outcome), StepError>;
 /// A sync “agent” that transforms immutable state.
 pub trait Agent<S>: Send + 'static {
     fn name(&self) -> &'static str;
-    fn run(&mut self, state: S, ctx: &Ctx) -> StepResult<S>;
+    fn run(&mut self, state: S, ctx: &mut Ctx) -> StepResult<S>;
 }
 
 /// Control flow for the runner.

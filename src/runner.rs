@@ -19,7 +19,7 @@ impl<S: Clone + 'static> Runner<S> {
         self
     }
 
-    pub fn run(mut self, mut state: S, ctx: &Ctx) -> Result<S, StepError> {
+    pub fn run(&mut self, mut state: S, ctx: &mut Ctx) -> Result<S, StepError> {
         let mut current = self.wf.start();
 
         for _ in 0..self.max_steps {

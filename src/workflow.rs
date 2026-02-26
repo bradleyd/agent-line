@@ -39,7 +39,7 @@ pub struct WorkflowBuilder<S: Clone + 'static> {
 }
 
 impl<S: Clone + 'static> WorkflowBuilder<S> {
-    pub fn agent<A: Agent<S>>(mut self, agent: A) -> Self {
+    pub fn register<A: Agent<S>>(mut self, agent: A) -> Self {
         let name = agent.name();
         if self.agents.contains_key(name) {
             self.duplicate = Some(name);
@@ -164,7 +164,7 @@ mod tests {
         fn name(&self) -> &'static str {
             self.0
         }
-        fn run(&mut self, state: S, _ctx: &Ctx) -> StepResult<S> {
+        fn run(&mut self, state: S, _ctx: &mut Ctx) -> StepResult<S> {
             Ok((state, Outcome::Done))
         }
     }
@@ -172,8 +172,8 @@ mod tests {
     #[test]
     fn build_valid_workflow() {
         let wf = Workflow::builder("test")
-            .agent(FakeAgent("a"))
-            .agent(FakeAgent("b"))
+            .register(FakeAgent("a"))
+            .register(FakeAgent("b"))
             .start_at("a")
             .then("b")
             .build();
@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn unknown_start_at_step() {
         let err = Workflow::builder("test")
-            .agent(FakeAgent("a"))
+            .register(FakeAgent("a"))
             .start_at("missing")
             .build()
             .err()
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn unknown_then_target() {
         let err = Workflow::builder("test")
-            .agent(FakeAgent("a"))
+            .register(FakeAgent("a"))
             .start_at("a")
             .then("missing")
             .build()
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn first_agent_becomes_default_start() {
         let wf = Workflow::builder("test")
-            .agent(FakeAgent("first"))
+            .register(FakeAgent("first"))
             .build();
 
         assert!(wf.is_ok());
@@ -228,8 +228,8 @@ mod tests {
     #[test]
     fn duplicate_agent_rejected() {
         let err = Workflow::builder("test")
-            .agent(FakeAgent("a"))
-            .agent(FakeAgent("a"))
+            .register(FakeAgent("a"))
+            .register(FakeAgent("a"))
             .build()
             .err()
             .unwrap();

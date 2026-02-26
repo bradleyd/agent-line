@@ -10,7 +10,7 @@ impl Agent<State> for AddOne {
     fn name(&self) -> &'static str {
         "add_one"
     }
-    fn run(&mut self, state: State, _ctx: &Ctx) -> StepResult<State> {
+    fn run(&mut self, state: State, _ctx: &mut Ctx) -> StepResult<State> {
         Ok((State { n: state.n + 1 }, Outcome::Continue))
     }
 }
@@ -20,7 +20,7 @@ impl Agent<State> for StopAtThree {
     fn name(&self) -> &'static str {
         "stop"
     }
-    fn run(&mut self, state: State, _ctx: &Ctx) -> StepResult<State> {
+    fn run(&mut self, state: State, _ctx: &mut Ctx) -> StepResult<State> {
         if state.n >= 3 {
             Ok((state, Outcome::Done))
         } else {
@@ -30,15 +30,15 @@ impl Agent<State> for StopAtThree {
 }
 
 fn main() {
-    let ctx = Ctx;
+    let mut ctx = Ctx::new();
     let wf = Workflow::builder("demo")
-        .agent(AddOne)
-        .agent(StopAtThree)
+        .register(AddOne)
+        .register(StopAtThree)
         .start_at("add_one")
         .then("stop")
         .build()
         .unwrap();
 
-    let final_state = Runner::new(wf).run(State { n: 0 }, &ctx).unwrap();
+    let final_state = Runner::new(wf).run(State { n: 0 }, &mut ctx).unwrap();
     println!("final n={}", final_state.n);
 }
