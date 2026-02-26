@@ -35,11 +35,15 @@ pub struct WorkflowBuilder<S: Clone + 'static> {
     chain_last: Option<&'static str>,
     agents: HashMap<&'static str, Box<dyn Agent<S>>>,
     default_next: HashMap<&'static str, &'static str>,
+    duplicate: Option<&'static str>,
 }
 
 impl<S: Clone + 'static> WorkflowBuilder<S> {
     pub fn agent<A: Agent<S>>(mut self, agent: A) -> Self {
         let name = agent.name();
+        if self.agents.contains_key(name) {
+            self.duplicate = Some(name);
+        }
         self.agents.insert(name, Box::new(agent));
 
         // If this is the first agent added and start isn't set, default start to it.
@@ -76,6 +80,11 @@ impl<S: Clone + 'static> WorkflowBuilder<S> {
     }
 
     pub fn build(self) -> Result<Workflow<S>, WorkflowError> {
+        // Check for duplicate agents.
+        if let Some(name) = self.duplicate {
+            return Err(WorkflowError::DuplicateAgent(name));
+        }
+
         // Check for a start step.
         let start = self.start.ok_or(WorkflowError::MissingStart)?;
 
@@ -119,6 +128,7 @@ impl<S: Clone + 'static> Workflow<S> {
             chain_last: None,
             agents: HashMap::new(),
             default_next: HashMap::new(),
+            duplicate: None,
         }
     }
 
@@ -137,5 +147,93 @@ impl<S: Clone + 'static> Workflow<S> {
 
     pub(crate) fn default_next(&self, from: &'static str) -> Option<&'static str> {
         self.default_next.get(from).copied()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Ctx, Outcome, StepResult};
+
+    #[derive(Clone)]
+    struct S;
+
+    struct FakeAgent(&'static str);
+
+    impl Agent<S> for FakeAgent {
+        fn name(&self) -> &'static str {
+            self.0
+        }
+        fn run(&mut self, state: S, _ctx: &Ctx) -> StepResult<S> {
+            Ok((state, Outcome::Done))
+        }
+    }
+
+    #[test]
+    fn build_valid_workflow() {
+        let wf = Workflow::builder("test")
+            .agent(FakeAgent("a"))
+            .agent(FakeAgent("b"))
+            .start_at("a")
+            .then("b")
+            .build();
+
+        assert!(wf.is_ok());
+        let wf = wf.unwrap();
+        assert_eq!(wf.name(), "test");
+        assert_eq!(wf.start(), "a");
+        assert_eq!(wf.default_next("a"), Some("b"));
+    }
+
+    #[test]
+    fn missing_start_on_empty_builder() {
+        let err = Workflow::<S>::builder("test").build().err().unwrap();
+        assert!(matches!(err, WorkflowError::MissingStart));
+    }
+
+    #[test]
+    fn unknown_start_at_step() {
+        let err = Workflow::builder("test")
+            .agent(FakeAgent("a"))
+            .start_at("missing")
+            .build()
+            .err()
+            .unwrap();
+
+        assert!(matches!(err, WorkflowError::UnknownStep("missing")));
+    }
+
+    #[test]
+    fn unknown_then_target() {
+        let err = Workflow::builder("test")
+            .agent(FakeAgent("a"))
+            .start_at("a")
+            .then("missing")
+            .build()
+            .err()
+            .unwrap();
+
+        assert!(matches!(err, WorkflowError::UnknownStep("missing")));
+    }
+
+    #[test]
+    fn first_agent_becomes_default_start() {
+        let wf = Workflow::builder("test")
+            .agent(FakeAgent("first"))
+            .build();
+
+        assert!(wf.is_ok());
+    }
+
+    #[test]
+    fn duplicate_agent_rejected() {
+        let err = Workflow::builder("test")
+            .agent(FakeAgent("a"))
+            .agent(FakeAgent("a"))
+            .build()
+            .err()
+            .unwrap();
+
+        assert!(matches!(err, WorkflowError::DuplicateAgent("a")));
     }
 }
