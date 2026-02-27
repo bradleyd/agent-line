@@ -38,8 +38,25 @@ impl RetryHint {
 
 #[derive(Debug)]
 pub enum StepError {
+    /// Bad input or agent logic error. Don't retry, fix the code.
     Invalid(String),
+    /// Transient failure (network, rate limit). Retrying might help.
+    Transient(String),
+    /// Agent decided to fail explicitly via Outcome::Fail.
+    Failed(String),
     Other(String),
+}
+
+impl From<ureq::Error> for StepError {
+    fn from(e: ureq::Error) -> Self {
+        StepError::Transient(e.to_string())
+    }
+}
+
+impl From<std::io::Error> for StepError {
+    fn from(e: std::io::Error) -> Self {
+        StepError::Other(e.to_string())
+    }
 }
 
 impl StepError {
@@ -49,6 +66,10 @@ impl StepError {
     pub fn other(msg: impl Into<String>) -> Self {
         StepError::Other(msg.into())
     }
+
+    pub fn transient(msg: impl Into<String>) -> Self {
+        StepError::Transient(msg.into())
+    }
 }
 
 impl fmt::Display for StepError {
@@ -56,6 +77,8 @@ impl fmt::Display for StepError {
         match self {
             Self::Invalid(msg) => write!(f, "invalid: {msg}"),
             Self::Other(msg) => write!(f, "{msg}"),
+            Self::Transient(msg) => write!(f, "transient: {msg}"),
+            Self::Failed(msg) => write!(f, "failed: {msg}"),
         }
     }
 }

@@ -1,6 +1,7 @@
 mod agent;
 mod ctx;
 mod runner;
+pub mod tools;
 mod workflow;
 
 pub use agent::{Agent, Outcome, RetryHint, StepError, StepResult};
