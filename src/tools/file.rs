@@ -1,4 +1,6 @@
 use crate::agent::StepError;
+use std::fs::OpenOptions;
+use std::io::Write;
 
 pub fn read_file(path: &str) -> Result<String, StepError> {
     Ok(std::fs::read_to_string(path)?)
@@ -42,4 +44,97 @@ fn find_files_recursive(
         }
     }
     Ok(())
+}
+
+pub fn append_file(file_path: &str, content: &str) -> Result<(), StepError> {
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(file_path)?;
+
+    file.write_all(content.as_bytes())?;
+    Ok(())
+}
+
+pub fn file_exists(file_path: &str) -> bool {
+    std::path::Path::new(file_path).exists()
+}
+
+pub fn delete_file(file_path: &str) -> Result<(), StepError> {
+    std::fs::remove_file(file_path)?;
+    Ok(())
+}
+
+pub fn create_dir(name: &str) -> Result<(), StepError> {
+    std::fs::create_dir_all(name)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_append_to_existing_file() {
+        let path = "/tmp/agent_line_test_append.txt";
+        let _ = std::fs::remove_file(path);
+        write_file(path, "hello").unwrap();
+        append_file(path, " world").unwrap();
+        assert_eq!(read_file(path).unwrap(), "hello world");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_append_creates_file_if_missing() {
+        let path = "/tmp/agent_line_test_append_new.txt";
+        let _ = std::fs::remove_file(path);
+        append_file(path, "new content").unwrap();
+        assert_eq!(read_file(path).unwrap(), "new content");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_file_exists_true() {
+        let path = "/tmp/agent_line_test_exists.txt";
+        write_file(path, "data").unwrap();
+        assert!(file_exists(path));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_file_exists_false() {
+        assert!(!file_exists("/tmp/agent_line_nonexistent_xyz.txt"));
+    }
+
+    #[test]
+    fn test_delete_file_removes_it() {
+        let path = "/tmp/agent_line_test_delete.txt";
+        write_file(path, "data").unwrap();
+        delete_file(path).unwrap();
+        assert!(!file_exists(path));
+    }
+
+    #[test]
+    fn test_delete_file_not_found_is_error() {
+        let result = delete_file("/tmp/agent_line_no_such_file_xyz.txt");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_dir_simple() {
+        let path = "/tmp/agent_line_test_dir";
+        let _ = std::fs::remove_dir_all(path);
+        create_dir(path).unwrap();
+        assert!(std::path::Path::new(path).is_dir());
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn test_create_dir_nested() {
+        let path = "/tmp/agent_line_test_dir_nested/a/b/c";
+        let _ = std::fs::remove_dir_all("/tmp/agent_line_test_dir_nested");
+        create_dir(path).unwrap();
+        assert!(std::path::Path::new(path).is_dir());
+        std::fs::remove_dir_all("/tmp/agent_line_test_dir_nested").unwrap();
+    }
 }

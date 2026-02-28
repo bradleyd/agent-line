@@ -76,7 +76,7 @@ ctx.clear();
 
 ## LLM Integration
 
-`Ctx` includes a built-in LLM client that targets Ollama by default. No API key needed for local usage.
+`Ctx` includes a built-in LLM client that supports Ollama, OpenAI-compatible APIs (OpenRouter, etc.), and the Anthropic API.
 
 ```rust
 let response = ctx.llm()
@@ -91,11 +91,35 @@ Set via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `AGENT_LINE_PROVIDER` | `ollama` | LLM provider: `ollama`, `openai`, or `anthropic` |
 | `AGENT_LINE_LLM_URL` | `http://localhost:11434` | LLM API base URL |
 | `AGENT_LINE_MODEL` | `llama3.1:8b` | Model name |
 | `AGENT_LINE_NUM_CTX` | `4096` | Context window size |
-| `AGENT_LINE_API_KEY` | (none) | API key (optional, for remote providers) |
+| `AGENT_LINE_API_KEY` | (none) | API key (required for remote providers) |
 | `AGENT_LINE_DEBUG` | (unset) | Set to any value to log LLM requests/responses to stderr |
+
+### Provider examples
+
+**Ollama (default, no API key needed):**
+```sh
+export AGENT_LINE_MODEL=llama3.1:8b
+```
+
+**OpenRouter:**
+```sh
+export AGENT_LINE_PROVIDER=openai
+export AGENT_LINE_LLM_URL=https://openrouter.ai/api
+export AGENT_LINE_MODEL=amazon/nova-lite-v1
+export AGENT_LINE_API_KEY=sk-or-...
+```
+
+**Anthropic:**
+```sh
+export AGENT_LINE_PROVIDER=anthropic
+export AGENT_LINE_LLM_URL=https://api.anthropic.com
+export AGENT_LINE_MODEL=claude-sonnet-4-20250514
+export AGENT_LINE_API_KEY=sk-ant-...
+```
 
 ## Outcomes
 
@@ -120,6 +144,10 @@ Standalone utility functions for common agent tasks. Import with `use agent_line
 |----------|-----------|-------------|
 | `read_file` | `(path: &str) -> Result<String, StepError>` | Read file contents |
 | `write_file` | `(path: &str, content: &str) -> Result<(), StepError>` | Write to file (creates parent dirs) |
+| `append_file` | `(path: &str, content: &str) -> Result<(), StepError>` | Append to file (creates if missing) |
+| `file_exists` | `(path: &str) -> bool` | Check if a file exists |
+| `delete_file` | `(path: &str) -> Result<(), StepError>` | Delete a file |
+| `create_dir` | `(path: &str) -> Result<(), StepError>` | Create directory (and parents) |
 | `list_dir` | `(path: &str) -> Result<Vec<String>, StepError>` | List directory entries |
 | `find_files` | `(path: &str, pattern: &str) -> Result<Vec<String>, StepError>` | Recursively find files by pattern |
 
@@ -128,6 +156,7 @@ Standalone utility functions for common agent tasks. Import with `use agent_line
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `run_cmd` | `(cmd: &str) -> Result<CmdOutput, StepError>` | Run a shell command |
+| `run_cmd_in_dir` | `(dir: &str, cmd: &str) -> Result<CmdOutput, StepError>` | Run a shell command in a specific directory |
 
 `CmdOutput` has `success: bool`, `stdout: String`, and `stderr: String`.
 
@@ -136,12 +165,16 @@ Standalone utility functions for common agent tasks. Import with `use agent_line
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `http_get` | `(url: &str) -> Result<String, StepError>` | GET request, returns body as string |
+| `http_post` | `(url: &str, body: &str) -> Result<String, StepError>` | POST with string body |
+| `http_post_json` | `(url: &str, body: &Value) -> Result<String, StepError>` | POST with JSON body |
 
 ### Parsing
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `strip_code_fences` | `(response: &str) -> String` | Remove markdown code fences from LLM output |
+| `parse_lines` | `(response: &str) -> Vec<String>` | Split LLM response into lines, strip numbering/bullets |
+| `extract_json` | `(response: &str) -> Result<String, StepError>` | Extract first JSON object or array from text |
 
 ## Error Handling
 
@@ -180,9 +213,6 @@ let mut runner = Runner::new(wf)
 - [ ] Runner hooks/callbacks for observability (`on_step`, `on_error`)
 - [ ] Built-in tracing beyond `AGENT_LINE_DEBUG`
 - [ ] Parallel agent execution (fan-out/fan-in with threads)
-- [ ] More LLM providers (OpenAI, Anthropic) without proxy
-- [ ] `http_post` tool
-- [ ] Response parsing helpers (structured output from LLMs)
 
 ## Dependencies
 

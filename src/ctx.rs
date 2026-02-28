@@ -13,12 +13,50 @@ struct LlmClient {
     model: String,
     num_ctx: u32,
     api_key: Option<String>,
+    provider: Provider,
 }
 
 pub struct LlmRequestBuilder {
     client: Arc<LlmClient>,
     system: Option<String>,
     messages: Vec<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Provider {
+    Ollama,
+    OpenAi,
+    Anthropic,
+}
+
+impl Provider {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "openai" => Provider::OpenAi,
+            "anthropic" => Provider::Anthropic,
+            _ => Provider::Ollama,
+        }
+    }
+
+    pub fn endpoint(&self, base_url: &str) -> String {
+        let base = base_url.trim_end_matches('/');
+        match self {
+            Provider::Ollama => format!("{base}/api/chat"),
+            Provider::OpenAi => format!("{base}/v1/chat/completions"),
+            Provider::Anthropic => format!("{base}/v1/messages"),
+        }
+    }
+
+    pub fn parse_response(&self, json: &serde_json::Value) -> Result<String, StepError> {
+        let content = match self {
+            Provider::Ollama => json["message"]["content"].as_str(),
+            Provider::OpenAi => json["choices"][0]["message"]["content"].as_str(),
+            Provider::Anthropic => json["content"][0]["text"].as_str(),
+        };
+        content
+            .map(|s| s.to_string())
+            .ok_or_else(|| StepError::other("llm response missing message content"))
+    }
 }
 
 impl LlmRequestBuilder {
@@ -55,11 +93,22 @@ impl LlmRequestBuilder {
             "stream": false
         });
 
-        let url = format!("{}/api/chat", self.client.base_url);
+        let url = self.client.provider.endpoint(&self.client.base_url);
         let mut request = ureq::post(&url);
 
-        if let Some(key) = &self.client.api_key {
-            request = request.header("Authorization", &format!("Bearer {key}"));
+        match &self.client.provider {
+            Provider::Anthropic => {
+                if let Some(key) = &self.client.api_key {
+                    request = request.header("x-api-key", key);
+                }
+                request = request.header("anthropic-version", "2023-06-01");
+                request = request.header("content-type", "application/json");
+            }
+            _ => {
+                if let Some(key) = &self.client.api_key {
+                    request = request.header("Authorization", &format!("Bearer {key}"));
+                }
+            }
         }
 
         if std::env::var("AGENT_LINE_DEBUG").is_ok() {
@@ -80,13 +129,10 @@ impl LlmRequestBuilder {
             .map_err(|e| StepError::transient(format!("llm response parse failed: {e}")))?;
 
         if std::env::var("AGENT_LINE_DEBUG").is_ok() {
-            eprintln!("[debug] LLM response: {}", &json["message"]["content"]);
+            eprintln!("[debug] LLM response: {}", &json);
         }
 
-        json["message"]["content"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| StepError::other("llm response missing message content"))
+        self.client.provider.parse_response(&json)
     }
 }
 
@@ -102,6 +148,9 @@ impl Ctx {
         };
 
         let api_key = env::var("AGENT_LINE_API_KEY").ok();
+        let provider = Provider::from_str(
+            &env::var("AGENT_LINE_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
+        );
 
         Self {
             store: HashMap::new(),
@@ -111,6 +160,7 @@ impl Ctx {
                 model,
                 num_ctx,
                 api_key,
+                provider,
             }),
         }
     }
@@ -156,5 +206,116 @@ impl Ctx {
 impl Default for Ctx {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Provider::from_str ---
+
+    #[test]
+    fn test_provider_from_str_ollama() {
+        assert_eq!(Provider::from_str("ollama"), Provider::Ollama);
+    }
+
+    #[test]
+    fn test_provider_from_str_openai() {
+        assert_eq!(Provider::from_str("openai"), Provider::OpenAi);
+    }
+
+    #[test]
+    fn test_provider_from_str_anthropic() {
+        assert_eq!(Provider::from_str("anthropic"), Provider::Anthropic);
+    }
+
+    #[test]
+    fn test_provider_from_str_case_insensitive() {
+        assert_eq!(Provider::from_str("OpenAI"), Provider::OpenAi);
+        assert_eq!(Provider::from_str("ANTHROPIC"), Provider::Anthropic);
+        assert_eq!(Provider::from_str("Ollama"), Provider::Ollama);
+    }
+
+    #[test]
+    fn test_provider_from_str_unknown_defaults_to_ollama() {
+        assert_eq!(Provider::from_str("something"), Provider::Ollama);
+    }
+
+    // --- Provider::endpoint ---
+
+    #[test]
+    fn test_ollama_endpoint() {
+        assert_eq!(
+            Provider::Ollama.endpoint("http://localhost:11434"),
+            "http://localhost:11434/api/chat"
+        );
+    }
+
+    #[test]
+    fn test_openai_endpoint() {
+        assert_eq!(
+            Provider::OpenAi.endpoint("https://openrouter.ai"),
+            "https://openrouter.ai/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_endpoint() {
+        assert_eq!(
+            Provider::Anthropic.endpoint("https://api.anthropic.com"),
+            "https://api.anthropic.com/v1/messages"
+        );
+    }
+
+    #[test]
+    fn test_endpoint_strips_trailing_slash() {
+        assert_eq!(
+            Provider::OpenAi.endpoint("https://openrouter.ai/"),
+            "https://openrouter.ai/v1/chat/completions"
+        );
+    }
+
+    // --- Provider::parse_response ---
+
+    #[test]
+    fn test_ollama_parse_response() {
+        let json = serde_json::json!({
+            "message": { "content": "Hello from Ollama" }
+        });
+        assert_eq!(
+            Provider::Ollama.parse_response(&json).unwrap(),
+            "Hello from Ollama"
+        );
+    }
+
+    #[test]
+    fn test_openai_parse_response() {
+        let json = serde_json::json!({
+            "choices": [{ "message": { "content": "Hello from OpenRouter" } }]
+        });
+        assert_eq!(
+            Provider::OpenAi.parse_response(&json).unwrap(),
+            "Hello from OpenRouter"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_parse_response() {
+        let json = serde_json::json!({
+            "content": [{ "text": "Hello from Claude" }]
+        });
+        assert_eq!(
+            Provider::Anthropic.parse_response(&json).unwrap(),
+            "Hello from Claude"
+        );
+    }
+
+    #[test]
+    fn test_parse_response_missing_content_is_error() {
+        let json = serde_json::json!({"unexpected": "shape"});
+        assert!(Provider::Ollama.parse_response(&json).is_err());
+        assert!(Provider::OpenAi.parse_response(&json).is_err());
+        assert!(Provider::Anthropic.parse_response(&json).is_err());
     }
 }
