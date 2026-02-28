@@ -6,5 +6,5 @@ mod workflow;
 
 pub use agent::{Agent, Outcome, RetryHint, StepError, StepResult};
 pub use ctx::Ctx;
-pub use runner::Runner;
+pub use runner::{ErrorEvent, Runner, StepEvent};
 pub use workflow::{Workflow, WorkflowBuilder, WorkflowError};

@@ -197,6 +197,58 @@ let mut runner = Runner::new(wf)
     .with_max_retries(3);     // default, per-agent consecutive retry limit
 ```
 
+## Hooks
+
+Runner supports closure-based hooks for observability. Closures are `FnMut`, so you can use stateful callbacks (counters, accumulators, etc.).
+
+```rust
+let mut runner = Runner::new(wf)
+    .on_step(|e| {
+        println!(
+            "[step {}] {} -> {:?} ({:.3}s)",
+            e.step_number, e.agent, e.outcome, e.duration.as_secs_f64()
+        );
+    })
+    .on_error(|e| {
+        eprintln!("[error] {} at step {}: {}", e.agent, e.step_number, e.error);
+    });
+```
+
+Or use the built-in tracing shorthand, which prints step transitions and errors to stderr:
+
+```rust
+let mut runner = Runner::new(wf).with_tracing();
+```
+
+Output looks like:
+
+```
+[step 1] fetch_weather -> Continue (0.001s)
+[step 2] fetch_calendar -> Continue (0.000s)
+[step 3] fetch_email -> Continue (0.000s)
+[step 4] summarize -> Done (2.340s)
+```
+
+### Hook event types
+
+`StepEvent` is passed to `on_step` after each successful agent step:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agent` | `&str` | Name of the agent that ran |
+| `outcome` | `&Outcome` | The outcome the agent returned |
+| `duration` | `Duration` | Wall-clock time for the step |
+| `step_number` | `usize` | Sequential step counter (starts at 1) |
+| `retries` | `usize` | Consecutive retry count for the current agent |
+
+`ErrorEvent` is passed to `on_error` when an agent errors or a limit is exceeded:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agent` | `&str` | Name of the agent that errored |
+| `error` | `&StepError` | The error that occurred |
+| `step_number` | `usize` | Step number where the error happened |
+
 ## Examples
 
 | Example | Run | Description |
@@ -206,12 +258,11 @@ let mut runner = Runner::new(wf)
 | edit_loop | `cargo run --example edit_loop` | Validate/fix loop with retry |
 | newsletter | `cargo run --example newsletter` | Multi-phase LLM workflow (needs Ollama) |
 | coder | `cargo run --example coder` | Code generation with test loop (needs Ollama) |
+| assistant | `cargo run --example assistant` | Personal assistant pipeline with tracing (needs Ollama) |
 
 ## TODO
 
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
-- [ ] Runner hooks/callbacks for observability (`on_step`, `on_error`)
-- [ ] Built-in tracing beyond `AGENT_LINE_DEBUG`
 - [ ] Parallel agent execution (fan-out/fan-in with threads)
 
 ## Dependencies
