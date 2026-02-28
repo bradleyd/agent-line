@@ -87,11 +87,28 @@ impl LlmRequestBuilder {
             }));
         }
 
-        let body = serde_json::json!({
-            "model": self.client.model,
-            "messages": messages,
-            "stream": false
-        });
+        let body = match &self.client.provider {
+            Provider::Ollama => serde_json::json!({
+                "model": self.client.model,
+                "messages": messages,
+                "stream": false,
+                "options": {
+                    "num_ctx": self.client.num_ctx
+                }
+            }),
+            Provider::OpenAi => serde_json::json!({
+                "model": self.client.model,
+                "messages": messages,
+                "stream": false,
+                "max_tokens": self.client.num_ctx
+            }),
+            Provider::Anthropic => serde_json::json!({
+                "model": self.client.model,
+                "messages": messages,
+                "stream": false,
+                "max_tokens": self.client.num_ctx
+            }),
+        };
 
         let url = self.client.provider.endpoint(&self.client.base_url);
         let mut request = ureq::post(&url);
