@@ -96,7 +96,7 @@ Set via environment variables:
 | `AGENT_LINE_MODEL` | `llama3.1:8b` | Model name |
 | `AGENT_LINE_NUM_CTX` | `4096` | Context window size |
 | `AGENT_LINE_API_KEY` | (none) | API key (required for remote providers) |
-| `AGENT_LINE_DEBUG` | (unset) | Set to any value to log LLM requests/responses to stderr |
+| `AGENT_LINE_DEBUG` | (unset) | Set to any value to log config at startup and LLM requests/responses to stderr |
 
 ### Provider examples
 
@@ -259,11 +259,11 @@ Output looks like:
 | newsletter | `cargo run --example newsletter` | Multi-phase LLM workflow (needs Ollama) |
 | coder | `cargo run --example coder` | Code generation with test loop (needs Ollama) |
 | assistant | `cargo run --example assistant` | Personal assistant pipeline with tracing (needs Ollama) |
+| parallel | `cargo run --example parallel` | Threaded fan-out/fan-in with researcher/writer/editor pipeline |
 
 ## TODO
 
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
-- [ ] Parallel agent execution (fan-out/fan-in with threads)
 
 ## Dependencies
 
