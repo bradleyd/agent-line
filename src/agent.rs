@@ -84,3 +84,71 @@ impl fmt::Display for StepError {
 }
 
 impl std::error::Error for StepError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- StepError constructors ---
+
+    #[test]
+    fn invalid_constructor() {
+        let err = StepError::invalid("bad input");
+        assert!(matches!(err, StepError::Invalid(msg) if msg == "bad input"));
+    }
+
+    #[test]
+    fn other_constructor() {
+        let err = StepError::other("something");
+        assert!(matches!(err, StepError::Other(msg) if msg == "something"));
+    }
+
+    #[test]
+    fn transient_constructor() {
+        let err = StepError::transient("timeout");
+        assert!(matches!(err, StepError::Transient(msg) if msg == "timeout"));
+    }
+
+    // --- StepError Display ---
+
+    #[test]
+    fn display_invalid() {
+        let err = StepError::Invalid("bad input".into());
+        assert_eq!(err.to_string(), "invalid: bad input");
+    }
+
+    #[test]
+    fn display_other() {
+        let err = StepError::Other("something".into());
+        assert_eq!(err.to_string(), "something");
+    }
+
+    #[test]
+    fn display_transient() {
+        let err = StepError::Transient("timeout".into());
+        assert_eq!(err.to_string(), "transient: timeout");
+    }
+
+    #[test]
+    fn display_failed() {
+        let err = StepError::Failed("nope".into());
+        assert_eq!(err.to_string(), "failed: nope");
+    }
+
+    // --- From conversions ---
+
+    #[test]
+    fn from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let step_err: StepError = io_err.into();
+        assert!(matches!(step_err, StepError::Other(msg) if msg.contains("file missing")));
+    }
+
+    // --- RetryHint ---
+
+    #[test]
+    fn retry_hint_new() {
+        let hint = RetryHint::new("reason");
+        assert_eq!(hint.reason, "reason");
+    }
+}

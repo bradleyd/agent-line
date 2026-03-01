@@ -169,6 +169,14 @@ impl Ctx {
             &env::var("AGENT_LINE_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
         );
 
+        if env::var("AGENT_LINE_DEBUG").is_ok() {
+            eprintln!("[debug] provider: {:?}", provider);
+            eprintln!("[debug] model: {}", model);
+            eprintln!("[debug] base_url: {}", base_url);
+            eprintln!("[debug] num_ctx: {}", num_ctx);
+            eprintln!("[debug] api_key: {}", if api_key.is_some() { "set" } else { "not set" });
+        }
+
         Self {
             store: HashMap::new(),
             log: vec![],
@@ -334,5 +342,73 @@ mod tests {
         assert!(Provider::Ollama.parse_response(&json).is_err());
         assert!(Provider::OpenAi.parse_response(&json).is_err());
         assert!(Provider::Anthropic.parse_response(&json).is_err());
+    }
+
+    // --- KV store ---
+
+    #[test]
+    fn set_then_get() {
+        let mut ctx = Ctx::new();
+        ctx.set("key", "value");
+        assert_eq!(ctx.get("key"), Some("value"));
+    }
+
+    #[test]
+    fn get_missing_key() {
+        let ctx = Ctx::new();
+        assert_eq!(ctx.get("nope"), None);
+    }
+
+    #[test]
+    fn set_overwrites() {
+        let mut ctx = Ctx::new();
+        ctx.set("key", "first");
+        ctx.set("key", "second");
+        assert_eq!(ctx.get("key"), Some("second"));
+    }
+
+    #[test]
+    fn remove_returns_value() {
+        let mut ctx = Ctx::new();
+        ctx.set("key", "value");
+        assert_eq!(ctx.remove("key"), Some("value".to_string()));
+        assert_eq!(ctx.get("key"), None);
+    }
+
+    #[test]
+    fn remove_missing_key() {
+        let mut ctx = Ctx::new();
+        assert_eq!(ctx.remove("nope"), None);
+    }
+
+    // --- Logging ---
+
+    #[test]
+    fn log_appends_and_logs_returns_in_order() {
+        let mut ctx = Ctx::new();
+        ctx.log("first");
+        ctx.log("second");
+        ctx.log("third");
+        assert_eq!(ctx.logs(), &["first", "second", "third"]);
+    }
+
+    #[test]
+    fn clear_logs_preserves_store() {
+        let mut ctx = Ctx::new();
+        ctx.set("key", "value");
+        ctx.log("msg");
+        ctx.clear_logs();
+        assert!(ctx.logs().is_empty());
+        assert_eq!(ctx.get("key"), Some("value"));
+    }
+
+    #[test]
+    fn clear_empties_both() {
+        let mut ctx = Ctx::new();
+        ctx.set("key", "value");
+        ctx.log("msg");
+        ctx.clear();
+        assert!(ctx.logs().is_empty());
+        assert_eq!(ctx.get("key"), None);
     }
 }
