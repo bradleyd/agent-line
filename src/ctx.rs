@@ -170,11 +170,18 @@ impl Ctx {
         );
 
         if env::var("AGENT_LINE_DEBUG").is_ok() {
-            eprintln!("[debug] provider: {:?}", provider);
-            eprintln!("[debug] model: {}", model);
-            eprintln!("[debug] base_url: {}", base_url);
-            eprintln!("[debug] num_ctx: {}", num_ctx);
-            eprintln!("[debug] api_key: {}", if api_key.is_some() { "set" } else { "not set" });
+            eprintln!(
+                "[debug] provider: {:?}\n\
+                 [debug] model: {}\n\
+                 [debug] base_url: {}\n\
+                 [debug] num_ctx: {}\n\
+                 [debug] api_key: {}",
+                provider,
+                model,
+                base_url,
+                num_ctx,
+                if api_key.is_some() { "set" } else { "not set" },
+            );
         }
 
         Self {
