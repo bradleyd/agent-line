@@ -4,9 +4,16 @@ use std::fmt;
 /// The result of running a step: a new state plus what to do next.
 pub type StepResult<S> = Result<(S, Outcome), StepError>;
 
-/// A sync “agent” that transforms immutable state.
+/// A sync agent that transforms state one step at a time.
+///
+/// Implement this trait on your own structs and register them into a
+/// [`crate::Workflow`] to build a pipeline.
 pub trait Agent<S>: Send + 'static {
+    /// A unique name for this agent, used for routing with [`Outcome::Next`].
     fn name(&self) -> &'static str;
+
+    /// Run one step. Returns the updated state and an [`Outcome`] that tells
+    /// the runner what to do next.
     fn run(&mut self, state: S, ctx: &mut Ctx) -> StepResult<S>;
 }
 
@@ -16,19 +23,28 @@ pub enum Outcome {
     /// Follow the workflow’s default next step (set via `.then()`).
     Continue,
 
+    /// Workflow complete, return the final state.
     Done,
+    /// Jump to a specific agent by name.
     Next(&'static str),
+    /// Re-run the current agent (counted against `max_retries`).
     Retry(RetryHint),
+    /// Sleep for the given duration, then re-run (counted against `max_retries`).
     Wait(std::time::Duration),
+    /// Stop the workflow with an error.
     Fail(String),
 }
 
+/// Metadata attached to an [`Outcome::Retry`] to explain why the agent
+/// wants to retry.
 #[derive(Debug, Clone)]
 pub struct RetryHint {
+    /// Human-readable reason for the retry.
     pub reason: String,
 }
 
 impl RetryHint {
+    /// Create a new hint with the given reason.
     pub fn new(reason: impl Into<String>) -> Self {
         Self {
             reason: reason.into(),
@@ -36,6 +52,8 @@ impl RetryHint {
     }
 }
 
+/// Error type for agent steps, with variants designed around what the caller
+/// can do about them.
 #[derive(Debug)]
 pub enum StepError {
     /// Bad input or agent logic error. Don't retry, fix the code.
@@ -44,6 +62,7 @@ pub enum StepError {
     Transient(String),
     /// Agent decided to fail explicitly via Outcome::Fail.
     Failed(String),
+    /// Everything else. Inspect the message for details.
     Other(String),
 }
 
@@ -60,13 +79,17 @@ impl From<std::io::Error> for StepError {
 }
 
 impl StepError {
+    /// Create an [`Invalid`](StepError::Invalid) error.
     pub fn invalid(msg: impl Into<String>) -> Self {
         StepError::Invalid(msg.into())
     }
+
+    /// Create an [`Other`](StepError::Other) error.
     pub fn other(msg: impl Into<String>) -> Self {
         StepError::Other(msg.into())
     }
 
+    /// Create a [`Transient`](StepError::Transient) error.
     pub fn transient(msg: impl Into<String>) -> Self {
         StepError::Transient(msg.into())
     }

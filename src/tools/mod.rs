@@ -1,3 +1,5 @@
+//! Standalone utility functions for common agent tasks.
+
 pub mod command;
 pub mod file;
 pub mod http;

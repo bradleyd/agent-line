@@ -1,5 +1,6 @@
 use crate::agent::StepError;
 
+/// Remove markdown code fences from LLM output.
 pub fn strip_code_fences(response: &str) -> String {
     let trimmed = response.trim();
     if trimmed.starts_with("```") {
@@ -11,6 +12,7 @@ pub fn strip_code_fences(response: &str) -> String {
     }
 }
 
+/// Split LLM output into lines, stripping numbering, bullets, and whitespace.
 pub fn parse_lines(response: &str) -> Vec<String> {
     response
         .lines() // split into individual lines
@@ -24,11 +26,12 @@ pub fn parse_lines(response: &str) -> Vec<String> {
         .collect()
 }
 
+/// Extract the first JSON object or array from text that may contain prose.
 pub fn extract_json(response: &str) -> Result<String, StepError> {
     let no_fences = strip_code_fences(response);
     // get opening { or  [
     let trimmed = no_fences.trim();
-    let index = trimmed.find(|c| c == '{' || c == '[');
+    let index = trimmed.find(['{', '[']);
     if let Some(start) = index {
         let slice = &trimmed[start..];
         let parsed = serde_json::Deserializer::from_str(slice)

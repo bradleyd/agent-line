@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::agent::StepError;
 use ureq::{self, Agent};
 
+/// Send a GET request and return the response body as a string.
 pub fn http_get(url: &str) -> Result<String, StepError> {
     let config = Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
@@ -20,6 +21,7 @@ pub fn http_get(url: &str) -> Result<String, StepError> {
     Ok(body)
 }
 
+/// Send a POST request with a string body and return the response body.
 pub fn http_post(url: &str, body: &str) -> Result<String, StepError> {
     let config = Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
@@ -32,6 +34,7 @@ pub fn http_post(url: &str, body: &str) -> Result<String, StepError> {
     Ok(response)
 }
 
+/// Send a POST request with a JSON body and return the response body.
 pub fn http_post_json(url: &str, body: &serde_json::Value) -> Result<String, StepError> {
     let config = Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
@@ -41,7 +44,7 @@ pub fn http_post_json(url: &str, body: &serde_json::Value) -> Result<String, Ste
 
     let response = agent
         .post(url)
-        .send_json(&body)?
+        .send_json(body)?
         .body_mut()
         .read_to_string()?;
 

@@ -16,20 +16,26 @@ struct LlmClient {
     provider: Provider,
 }
 
+/// Builder for LLM chat requests. Obtained via [`Ctx::llm`].
 pub struct LlmRequestBuilder {
     client: Arc<LlmClient>,
     system: Option<String>,
     messages: Vec<String>,
 }
 
+/// LLM provider, set via the `AGENT_LINE_PROVIDER` env var.
 #[derive(Debug, PartialEq)]
 pub enum Provider {
+    /// Ollama (default). Local inference, no API key needed.
     Ollama,
+    /// OpenAI-compatible APIs (OpenRouter, etc.).
     OpenAi,
+    /// Anthropic API.
     Anthropic,
 }
 
 impl Provider {
+    /// Parse a provider name. Unrecognized values default to Ollama.
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "openai" => Provider::OpenAi,
@@ -38,6 +44,7 @@ impl Provider {
         }
     }
 
+    /// Return the full chat endpoint URL for this provider.
     pub fn endpoint(&self, base_url: &str) -> String {
         let base = base_url.trim_end_matches('/');
         match self {
@@ -47,6 +54,7 @@ impl Provider {
         }
     }
 
+    /// Extract the assistant message from a provider-specific JSON response.
     pub fn parse_response(&self, json: &serde_json::Value) -> Result<String, StepError> {
         let content = match self {
             Provider::Ollama => json["message"]["content"].as_str(),
@@ -60,16 +68,19 @@ impl Provider {
 }
 
 impl LlmRequestBuilder {
+    /// Set the system prompt.
     pub fn system(mut self, msg: &str) -> Self {
         self.system = Some(msg.to_string());
         self
     }
 
+    /// Append a user message.
     pub fn user(mut self, msg: impl Into<String>) -> Self {
         self.messages.push(msg.into());
         self
     }
 
+    /// Send the request and return the assistant's response text.
     pub fn send(self) -> Result<String, StepError> {
         let mut messages = Vec::new();
 
@@ -154,6 +165,8 @@ impl LlmRequestBuilder {
 }
 
 impl Ctx {
+    /// Create a new context. Configuration is read from environment variables
+    /// (see the crate-level docs for the full list).
     pub fn new() -> Self {
         let model = env::var("AGENT_LINE_MODEL").unwrap_or_else(|_| "llama3.1:8b".to_string());
         let base_url =
@@ -197,35 +210,43 @@ impl Ctx {
         }
     }
 
+    /// Insert or overwrite a key in the KV store.
     pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.store.insert(key.into(), value.into());
     }
 
+    /// Look up a key in the KV store.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.store.get(key).map(|s| s.as_str())
     }
 
+    /// Remove a key from the KV store, returning its value if it existed.
     pub fn remove(&mut self, key: &str) -> Option<String> {
         self.store.remove(key)
     }
 
+    /// Append a message to the event log.
     pub fn log(&mut self, msg: impl Into<String>) {
         self.log.push(msg.into());
     }
 
+    /// Return all log messages in order.
     pub fn logs(&self) -> &[String] {
         &self.log
     }
 
+    /// Clear the event log, leaving the KV store intact.
     pub fn clear_logs(&mut self) {
         self.log.clear();
     }
 
+    /// Clear both the KV store and the event log.
     pub fn clear(&mut self) {
         self.store.clear();
         self.log.clear();
     }
 
+    /// Start building an LLM chat request.
     pub fn llm(&self) -> LlmRequestBuilder {
         LlmRequestBuilder {
             client: Arc::clone(&self.llm_client),

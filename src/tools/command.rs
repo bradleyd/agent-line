@@ -2,12 +2,17 @@ use std::process::Command;
 
 use crate::agent::StepError;
 
+/// Output from a shell command.
 pub struct CmdOutput {
+    /// Whether the command exited with status 0.
     pub success: bool,
+    /// Standard output.
     pub stdout: String,
+    /// Standard error.
     pub stderr: String,
 }
 
+/// Run a shell command via `sh -c`.
 pub fn run_cmd(cmd: &str) -> Result<CmdOutput, StepError> {
     let output = Command::new("sh").arg("-c").arg(cmd).output()?;
 
@@ -18,6 +23,7 @@ pub fn run_cmd(cmd: &str) -> Result<CmdOutput, StepError> {
     })
 }
 
+/// Run a shell command via `sh -c` in a specific directory.
 pub fn run_cmd_in_dir(dir_name: &str, cmd: &str) -> Result<CmdOutput, StepError> {
     let output = Command::new("sh")
         .arg("-c")

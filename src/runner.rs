@@ -17,15 +17,21 @@ pub struct ErrorEvent<'a> {
     pub step_number: usize,
 }
 
+type StepHook = Box<dyn FnMut(&StepEvent)>;
+type ErrorHook = Box<dyn FnMut(&ErrorEvent)>;
+
+/// Executes a [`Workflow`] step by step, handling retries, waits, and routing.
 pub struct Runner<S: Clone + 'static> {
     wf: Workflow<S>,
     max_steps: usize,
     max_retries: usize,
-    on_step: Option<Box<dyn FnMut(&StepEvent)>>,
-    on_error: Option<Box<dyn FnMut(&ErrorEvent)>>,
+    on_step: Option<StepHook>,
+    on_error: Option<ErrorHook>,
 }
 
 impl<S: Clone + 'static> Runner<S> {
+    /// Create a runner for the given workflow with default limits
+    /// (max_steps: 10,000, max_retries: 3).
     pub fn new(wf: Workflow<S>) -> Self {
         Self {
             wf,
@@ -42,6 +48,7 @@ impl<S: Clone + 'static> Runner<S> {
         self
     }
 
+    /// Set the maximum consecutive retries per agent before failing.
     pub fn with_max_retries(mut self, max_retries: usize) -> Self {
         self.max_retries = max_retries;
         self
@@ -75,6 +82,8 @@ impl<S: Clone + 'static> Runner<S> {
         })
     }
 
+    /// Run the workflow to completion, returning the final state or an error.
+    /// Can be called multiple times on the same runner.
     pub fn run(&mut self, mut state: S, ctx: &mut Ctx) -> Result<S, StepError> {
         let mut current = self.wf.start();
         let mut retries: usize = 0;

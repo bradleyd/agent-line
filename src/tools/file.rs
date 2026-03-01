@@ -2,9 +2,11 @@ use crate::agent::StepError;
 use std::fs::OpenOptions;
 use std::io::Write;
 
+/// Read an entire file into a string.
 pub fn read_file(path: &str) -> Result<String, StepError> {
     Ok(std::fs::read_to_string(path)?)
 }
+/// Write content to a file, creating parent directories if needed.
 pub fn write_file(path: &str, content: &str) -> Result<(), StepError> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)?;
@@ -12,6 +14,7 @@ pub fn write_file(path: &str, content: &str) -> Result<(), StepError> {
     Ok(std::fs::write(path, content)?)
 }
 
+/// List entries in a directory.
 pub fn list_dir(path: &str) -> Result<Vec<String>, StepError> {
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(path)? {
@@ -20,6 +23,7 @@ pub fn list_dir(path: &str) -> Result<Vec<String>, StepError> {
     }
     Ok(entries)
 }
+/// Recursively find files matching a suffix pattern (e.g. `"*.rs"`).
 pub fn find_files(path: &str, pattern: &str) -> Result<Vec<String>, StepError> {
     let mut results = Vec::new();
     find_files_recursive(path, pattern, &mut results)?;
@@ -46,6 +50,7 @@ fn find_files_recursive(
     Ok(())
 }
 
+/// Append content to a file, creating it if it doesn't exist.
 pub fn append_file(file_path: &str, content: &str) -> Result<(), StepError> {
     let mut file = OpenOptions::new()
         .append(true)
@@ -56,15 +61,18 @@ pub fn append_file(file_path: &str, content: &str) -> Result<(), StepError> {
     Ok(())
 }
 
+/// Check if a file exists.
 pub fn file_exists(file_path: &str) -> bool {
     std::path::Path::new(file_path).exists()
 }
 
+/// Delete a file.
 pub fn delete_file(file_path: &str) -> Result<(), StepError> {
     std::fs::remove_file(file_path)?;
     Ok(())
 }
 
+/// Create a directory and all parent directories.
 pub fn create_dir(name: &str) -> Result<(), StepError> {
     std::fs::create_dir_all(name)?;
     Ok(())

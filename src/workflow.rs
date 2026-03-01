@@ -6,10 +6,14 @@ use std::fmt;
 // WorkflowError
 // ---------------------------------------------------------------------------
 
+/// Errors returned by [`WorkflowBuilder::build`].
 #[derive(Debug)]
 pub enum WorkflowError {
+    /// Two agents were registered with the same name.
     DuplicateAgent(&'static str),
+    /// A `start_at` or `then` target does not match any registered agent.
     UnknownStep(&'static str),
+    /// No agents were registered or no start step could be determined.
     MissingStart,
 }
 
@@ -29,6 +33,7 @@ impl std::error::Error for WorkflowError {}
 // WorkflowBuilder
 // ---------------------------------------------------------------------------
 
+/// Step-by-step builder for a [`Workflow`]. Obtained via [`Workflow::builder`].
 pub struct WorkflowBuilder<S: Clone + 'static> {
     name: &'static str,
     start: Option<&'static str>,
@@ -39,6 +44,7 @@ pub struct WorkflowBuilder<S: Clone + 'static> {
 }
 
 impl<S: Clone + 'static> WorkflowBuilder<S> {
+    /// Register an agent. The first agent registered becomes the default start step.
     pub fn register<A: Agent<S>>(mut self, agent: A) -> Self {
         let name = agent.name();
         if self.agents.contains_key(name) {
@@ -59,6 +65,7 @@ impl<S: Clone + 'static> WorkflowBuilder<S> {
         self
     }
 
+    /// Set which agent runs first (overrides the default).
     pub fn start_at(mut self, step: &'static str) -> Self {
         self.start = Some(step);
         self.chain_last = Some(step);
@@ -79,6 +86,8 @@ impl<S: Clone + 'static> WorkflowBuilder<S> {
         self
     }
 
+    /// Validate and build the workflow. Returns an error if agents are
+    /// missing, duplicated, or if routing targets don't exist.
     pub fn build(self) -> Result<Workflow<S>, WorkflowError> {
         // Check for duplicate agents.
         if let Some(name) = self.duplicate {
@@ -113,6 +122,7 @@ impl<S: Clone + 'static> WorkflowBuilder<S> {
 // Workflow (validated, only constructed via build())
 // ---------------------------------------------------------------------------
 
+/// A validated workflow of agents. Built via [`Workflow::builder`].
 pub struct Workflow<S: Clone + 'static> {
     name: &'static str,
     start: &'static str,
@@ -121,6 +131,7 @@ pub struct Workflow<S: Clone + 'static> {
 }
 
 impl<S: Clone + 'static> Workflow<S> {
+    /// Create a new builder with the given workflow name.
     pub fn builder(name: &'static str) -> WorkflowBuilder<S> {
         WorkflowBuilder {
             name,
@@ -132,6 +143,7 @@ impl<S: Clone + 'static> Workflow<S> {
         }
     }
 
+    /// The workflow's name (set at builder creation).
     pub fn name(&self) -> &'static str {
         self.name
     }
