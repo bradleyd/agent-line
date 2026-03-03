@@ -1,3 +1,14 @@
+// Code generation with test loop.
+//
+// Pipeline: planner -> coder -> tester -> (loop back to coder on failure)
+//
+// The coder agent switches its system prompt based on whether test failures
+// exist -- first pass writes from the plan, subsequent passes fix based on
+// test output.
+//
+// Run: cargo run --example coder
+// Requires an LLM (Ollama by default, or set AGENT_LINE_PROVIDER).
+
 use agent_line::{tools, Agent, Ctx, Outcome, Runner, StepResult, Workflow};
 
 // ---------------------------------------------------------------------------
@@ -57,45 +68,64 @@ impl Agent<Task> for Coder {
         "coder"
     }
     fn run(&mut self, mut state: Task, ctx: &mut Ctx) -> StepResult<Task> {
-        let plan = ctx.get("plan").unwrap_or("no plan found").to_string();
+        let is_fix = !state.test_output.is_empty();
 
-        let response = ctx
-            .llm()
-            .system(
-                "You are a developer. Write the code based on the plan. \
-                 Return ONLY the complete file contents, no explanation. \
-                 Do not include doc comments or doc tests. \
-                 Do not wrap the output in markdown code fences.",
-            )
-            .user(format!(
-                "Plan:\n{plan}\n\nFile: {}\n\nCurrent code:\n{}",
-                state.file_path, state.code
-            ))
-            .send()?;
+        let response = if is_fix {
+            ctx.log(format!("coder: fixing (attempt {})", state.attempts));
+
+            ctx.llm()
+                .system(
+                    "You are a developer. Fix the code based on the test failures. \
+                     Return ONLY the complete fixed file contents, no explanation. \
+                     Do not include doc comments or doc tests. \
+                     Do not wrap the output in markdown code fences.",
+                )
+                .user(format!(
+                    "Test errors:\n{}\n\nCurrent code:\n{}",
+                    state.test_output, state.code
+                ))
+                .send()?
+        } else {
+            let plan = ctx.get("plan").unwrap_or("no plan found").to_string();
+            ctx.log("coder: writing initial code");
+
+            ctx.llm()
+                .system(
+                    "You are a developer. Write the code based on the plan. \
+                     Return ONLY the complete file contents, no explanation. \
+                     Do not include doc comments or doc tests. \
+                     Do not wrap the output in markdown code fences.",
+                )
+                .user(format!(
+                    "Plan:\n{plan}\n\nFile: {}\n\nCurrent code:\n{}",
+                    state.file_path, state.code
+                ))
+                .send()?
+        };
 
         state.code = tools::strip_code_fences(&response);
+        state.test_output.clear();
         tools::write_file(&state.file_path, &state.code)?;
-        ctx.log("coder: wrote code to file");
         Ok((state, Outcome::Continue))
     }
 }
 
-struct TestRunner;
-impl Agent<Task> for TestRunner {
+struct Tester;
+impl Agent<Task> for Tester {
     fn name(&self) -> &'static str {
-        "test_runner"
+        "tester"
     }
     fn run(&mut self, mut state: Task, ctx: &mut Ctx) -> StepResult<Task> {
         let manifest = ctx.get("manifest_path").unwrap_or("Cargo.toml").to_string();
         let result = tools::run_cmd(&format!("cargo test --manifest-path {manifest} --lib"))?;
 
         if result.success {
-            ctx.log("tests: all passed");
+            ctx.log("tester: all passed");
             Ok((state, Outcome::Done))
         } else {
             state.test_output = result.stderr;
             state.attempts += 1;
-            ctx.log(format!("tests: failed (attempt {})", state.attempts));
+            ctx.log(format!("tester: failed (attempt {})", state.attempts));
 
             if state.attempts >= state.max_attempts {
                 Ok((
@@ -103,36 +133,9 @@ impl Agent<Task> for TestRunner {
                     Outcome::Fail("max fix attempts reached, tests still failing".into()),
                 ))
             } else {
-                Ok((state, Outcome::Next("fixer")))
+                Ok((state, Outcome::Next("coder")))
             }
         }
-    }
-}
-
-struct Fixer;
-impl Agent<Task> for Fixer {
-    fn name(&self) -> &'static str {
-        "fixer"
-    }
-    fn run(&mut self, mut state: Task, ctx: &mut Ctx) -> StepResult<Task> {
-        let response = ctx
-            .llm()
-            .system(
-                "You are a debugger. Fix the code based on the test failures. \
-                 Return ONLY the complete fixed file contents, no explanation. \
-                 Do not include doc comments or doc tests. \
-                 Do not wrap the output in markdown code fences.",
-            )
-            .user(format!(
-                "Test errors:\n{}\n\nCurrent code:\n{}",
-                state.test_output, state.code
-            ))
-            .send()?;
-
-        state.code = tools::strip_code_fences(&response);
-        tools::write_file(&state.file_path, &state.code)?;
-        ctx.log("fixer: wrote fix to file");
-        Ok((state, Outcome::Next("test_runner")))
     }
 }
 
@@ -152,7 +155,7 @@ fn scaffold_project(dir: &std::path::Path) {
 }
 
 // ---------------------------------------------------------------------------
-// Orchestrator
+// Main
 // ---------------------------------------------------------------------------
 
 fn main() {
@@ -168,11 +171,10 @@ fn main() {
     let wf = Workflow::builder("coding-agent")
         .register(Planner)
         .register(Coder)
-        .register(TestRunner)
-        .register(Fixer)
+        .register(Tester)
         .start_at("planner")
         .then("coder")
-        .then("test_runner")
+        .then("tester")
         .build()
         .unwrap();
 
@@ -180,7 +182,9 @@ fn main() {
 
     let result = runner.run(
         Task {
-            description: "Add a function called `reverse_string` that reverses a string and add unit tests".into(),
+            description: "Add a function called `reverse_string` that reverses a string \
+                          and add unit tests"
+                .into(),
             file_path: lib_path,
             code: String::new(),
             test_output: String::new(),
