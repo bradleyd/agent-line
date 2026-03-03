@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --lib --examples
+
+      - name: Test
+        run: cargo test --lib
+
+      - name: Clippy
+        run: cargo clippy --lib --examples -- -D warnings
+
+      - name: Docs
+        run: cargo doc --no-deps

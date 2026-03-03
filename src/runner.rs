@@ -3,17 +3,25 @@ use std::time::{Duration, Instant};
 
 /// Passed to the `on_step` hook after each successful agent step.
 pub struct StepEvent<'a> {
+    /// Name of the agent that ran.
     pub agent: &'a str,
+    /// The outcome the agent returned.
     pub outcome: &'a Outcome,
+    /// Wall-clock time for the step.
     pub duration: Duration,
+    /// Sequential step counter (starts at 1).
     pub step_number: usize,
+    /// Consecutive retry count for the current agent.
     pub retries: usize,
 }
 
 /// Passed to the `on_error` hook when an agent errors or a limit is exceeded.
 pub struct ErrorEvent<'a> {
+    /// Name of the agent that errored.
     pub agent: &'a str,
+    /// The error that occurred.
     pub error: &'a StepError,
+    /// Step number where the error happened.
     pub step_number: usize,
 }
 
