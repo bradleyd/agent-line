@@ -1,12 +1,12 @@
 [package]
 name = "agent-line"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A batteries-included Rust library for building agent workflows"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/bradleydsmith/agent-line"
-repository = "https://github.com/bradleydsmith/agent-line"
+homepage = "https://github.com/bradleyd/agent-line"
+repository = "https://github.com/bradleyd/agent-line"
 keywords = ["agent", "workflow", "llm", "pipeline"]
 categories = ["development-tools"]
 
