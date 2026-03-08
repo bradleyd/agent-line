@@ -1,6 +1,6 @@
 [package]
 name = "agent-line"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "A batteries-included Rust library for building agent workflows"
 license = "MIT"

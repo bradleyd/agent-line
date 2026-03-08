@@ -13,7 +13,7 @@ pub fn http_get(url: &str) -> Result<String, StepError> {
 
     let body: String = agent
         .get(url)
-        .header("Example-Header", "header value")
+        .header("User-Agent", "agent-line")
         .call()?
         .body_mut()
         .read_to_string()?;
@@ -29,7 +29,12 @@ pub fn http_post(url: &str, body: &str) -> Result<String, StepError> {
 
     let agent: Agent = config.into();
 
-    let response = agent.post(url).send(body)?.body_mut().read_to_string()?;
+    let response = agent
+        .post(url)
+        .header("User-Agent", "agent-line")
+        .send(body)?
+        .body_mut()
+        .read_to_string()?;
 
     Ok(response)
 }
@@ -44,6 +49,7 @@ pub fn http_post_json(url: &str, body: &serde_json::Value) -> Result<String, Ste
 
     let response = agent
         .post(url)
+        .header("User-Agent", "agent-line")
         .send_json(body)?
         .body_mut()
         .read_to_string()?;
