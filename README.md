@@ -229,6 +229,60 @@ Output looks like:
 [step 4] summarize -> Done (2.340s)
 ```
 
+### OpenTelemetry (OTEL) integration
+
+You can export each agent step as OTEL spans by wiring hooks to your own tracer:
+
+```rust
+use agent_line::{Runner, Workflow};
+use opentelemetry::{global, Context, KeyValue};
+use opentelemetry::trace::{Span, TraceContextExt, Tracer};
+
+let mut workflow_span = global::tracer("agent-line").start("workflow.run");
+let parent = Context::new().with_remote_span_context(workflow_span.span_context().clone());
+let parent_for_step = parent.clone();
+let parent_for_error = parent.clone();
+
+let mut runner = Runner::new(wf)
+    .on_step(move |e| {
+        let tracer = global::tracer("agent-line");
+        let mut span = tracer.start_with_context("agent.step", &parent_for_step);
+        span.set_attribute(KeyValue::new("agent.name", e.agent.to_string()));
+        span.set_attribute(KeyValue::new("step.number", e.step_number as i64));
+        span.set_attribute(KeyValue::new("step.retries", e.retries as i64));
+        span.set_attribute(KeyValue::new("step.outcome", format!("{:?}", e.outcome)));
+        span.set_attribute(KeyValue::new("step.duration_ms", e.duration.as_millis() as i64));
+        span.end();
+    })
+    .on_error(move |e| {
+        let tracer = global::tracer("agent-line");
+        let mut span = tracer.start_with_context("agent.step.error", &parent_for_error);
+        span.set_attribute(KeyValue::new("agent.name", e.agent.to_string()));
+        span.set_attribute(KeyValue::new("step.number", e.step_number as i64));
+        span.set_attribute(KeyValue::new("error.message", e.error.to_string()));
+        span.end();
+    });
+
+let _ = runner.run(initial_state, &mut ctx);
+workflow_span.end();
+```
+
+Full runnable example:
+
+```sh
+cargo run --example otel_tracing
+```
+
+### Why tracing is hook-based
+
+`agent-line` intentionally does not hardcode an observability backend in the core runner. That design is the most flexible for a library because users can:
+
+- Send events to OTEL, `tracing`, metrics, logs, or custom sinks without adapter friction.
+- Avoid extra global initialization and dependency weight when tracing is not needed.
+- Keep runtime behavior predictable in embedded, CLI, service, and test environments.
+
+The built-in `with_tracing()` helper remains for quick local debugging, while hooks cover production observability needs.
+
 ### Hook event types
 
 `StepEvent` is passed to `on_step` after each successful agent step:
@@ -259,6 +313,7 @@ Output looks like:
 | newsletter | `cargo run --example newsletter` | Multi-phase LLM workflow (needs Ollama) |
 | coder | `cargo run --example coder` | Code generation with test loop (needs Ollama) |
 | assistant | `cargo run --example assistant` | Personal assistant pipeline with tracing (needs Ollama) |
+| otel_tracing | `cargo run --example otel_tracing` | OTEL span export from `on_step`/`on_error` hooks |
 | parallel | `cargo run --example parallel` | Threaded fan-out/fan-in with researcher/writer/editor pipeline |
 
 ## TODO
