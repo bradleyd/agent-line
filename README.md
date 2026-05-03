@@ -447,6 +447,7 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 ## TODO
 
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
+- [ ] Better LLM error output. Today a non-2xx response surfaces as `transient: llm request failed: http status: 404` with no body. Read the response body and surface the underlying message (e.g. Ollama's "model X not found") so users can act on it.
 
 ## Dependencies
 
