@@ -10,19 +10,16 @@ use state::IncidentState;
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let api_key = match env::var("ANTHROPIC_API_KEY") {
-        Ok(key) => key,
-        Err(_) => {
-            eprintln!("Set ANTHROPIC_API_KEY to run this example.");
-            eprintln!("The fast triage agent runs locally on Ollama (no key needed);");
-            eprintln!("the deep investigation report uses the Anthropic API.");
-            std::process::exit(1);
-        }
-    };
-
+    // Both models default to local Ollama so this example runs out of the
+    // box. Override with env vars or swap to a remote provider in the
+    // commented-out alternatives below.
+    //
+    //   ollama pull qwen3:8b
+    //   ollama pull llama3.1:70b   # heavier model for the deep step
+    //   cargo run --example incident_investigation
+    //
     let fast_model = env::var("INCIDENT_FAST_MODEL").unwrap_or_else(|_| "qwen3:8b".to_string());
-    let deep_model =
-        env::var("INCIDENT_DEEP_MODEL").unwrap_or_else(|_| "claude-sonnet-4-20250514".to_string());
+    let deep_model = env::var("INCIDENT_DEEP_MODEL").unwrap_or_else(|_| "llama3.1:70b".to_string());
 
     let fast_llm = LlmConfig::builder()
         .provider(Provider::Ollama)
@@ -32,12 +29,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let deep_llm = LlmConfig::builder()
-        .provider(Provider::Anthropic)
-        .base_url("https://api.anthropic.com")
+        .provider(Provider::Ollama)
+        .base_url("http://localhost:11434")
         .model(deep_model)
-        .api_key(&api_key)
-        .max_tokens(1400)
+        .num_ctx(8192)
         .build()?;
+
+    // --- Remote alternatives ---
+    //
+    // Swap deep_llm to OpenRouter (one API key works across many models):
+    //
+    //     let api_key = env::var("OPENROUTER_API_KEY")?;
+    //     let deep_llm = LlmConfig::builder()
+    //         .provider(Provider::OpenAi)
+    //         .base_url("https://openrouter.ai/api")
+    //         .model("anthropic/claude-sonnet-4.6")
+    //         .api_key(&api_key)
+    //         .max_tokens(1400)
+    //         .build()?;
+    //
+    // Or to Anthropic directly:
+    //
+    //     let api_key = env::var("ANTHROPIC_API_KEY")?;
+    //     let deep_llm = LlmConfig::builder()
+    //         .provider(Provider::Anthropic)
+    //         .base_url("https://api.anthropic.com")
+    //         .model("claude-sonnet-4-20250514")
+    //         .api_key(&api_key)
+    //         .max_tokens(1400)
+    //         .build()?;
 
     let mut ctx = Ctx::new();
     let workflow = Workflow::builder("incident-investigation")

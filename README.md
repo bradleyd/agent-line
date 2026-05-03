@@ -144,6 +144,8 @@ For explicit configuration without environment variables, use `LlmConfig::builde
 export AGENT_LINE_MODEL=llama3.1:8b
 ```
 
+Requests to Ollama send `"think": false` so thinking-capable models (Qwen 3, etc.) skip the `<think>...</think>` reasoning block before the response. This is the default for latency reasons; thinking can otherwise add minutes per request. Models without thinking support ignore the field.
+
 **OpenRouter:**
 ```sh
 export AGENT_LINE_PROVIDER=openai
@@ -438,7 +440,7 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 | edit_loop | `cargo run --example edit_loop` | Validate/fix loop with retry |
 | newsletter | `cargo run --example newsletter` | Multi-phase LLM workflow (needs Ollama) |
 | multi_model | `cargo run --example multi_model` | Pipeline with different models per agent: cheap step uses local Ollama (`qwen3:8b`), strong step uses Anthropic (needs `ANTHROPIC_API_KEY`) |
-| incident_investigation | `cargo run --example incident_investigation` | Multi-file incident correlation workflow with fast local triage (Ollama) and deep remote report (Anthropic, needs `ANTHROPIC_API_KEY`) |
+| incident_investigation | `cargo run --example incident_investigation` | Multi-file incident correlation workflow with a fast small Ollama model for triage and a heavier Ollama model for the report. `main.rs` shows commented-out OpenRouter and Anthropic alternatives |
 | coder | `cargo run --example coder` | Code generation with test loop (needs Ollama) |
 | assistant | `cargo run --example assistant` | Personal assistant pipeline with tracing (needs Ollama) |
 | otel_tracing | `cargo run --example otel_tracing` | OTEL span export from `on_step`/`on_error` hooks |
@@ -448,6 +450,7 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
 - [ ] Better LLM error output. Today a non-2xx response surfaces as `transient: llm request failed: http status: 404` with no body. Read the response body and surface the underlying message (e.g. Ollama's "model X not found") so users can act on it.
+- [ ] Expose Ollama thinking mode as an opt-in. The library currently hardcodes `"think": false` for the Ollama provider so thinking models (Qwen 3, etc.) skip the `<think>` block by default. Add a way to re-enable it (likely a method on `LlmConfigBuilder`) for users who want the quality bump on hard reasoning tasks and can wait.
 
 ## Dependencies
 

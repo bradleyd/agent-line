@@ -298,6 +298,12 @@ impl LlmRequestBuilder {
                 "model": self.config.model,
                 "messages": messages,
                 "stream": false,
+                // Disable Qwen 3-style "thinking" tokens. Thinking models can
+                // otherwise spend minutes generating <think>...</think>
+                // reasoning before producing the actual response, which is
+                // rarely what an agentic workflow wants. Ignored by models
+                // that do not support thinking.
+                "think": false,
                 "options": {
                     "num_ctx": self.config.num_ctx
                 }
