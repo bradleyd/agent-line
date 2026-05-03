@@ -391,11 +391,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut runner = Runner::new(wf)
-            .with_max_retries(1)
-            .on_error(move |_e| {
-                *count_clone.lock().unwrap() += 1;
-            });
+        let mut runner = Runner::new(wf).with_max_retries(1).on_error(move |_e| {
+            *count_clone.lock().unwrap() += 1;
+        });
 
         let mut ctx = Ctx::new();
         let _ = runner.run(S(0), &mut ctx);
@@ -418,12 +416,10 @@ mod tests {
             .unwrap();
 
         // Two agents ping-pong via Continue, but max_steps=1 cuts it short
-        let mut runner = Runner::new(wf)
-            .with_max_steps(1)
-            .on_error(move |e| {
-                assert!(e.error.to_string().contains("max_steps exceeded"));
-                *count_clone.lock().unwrap() += 1;
-            });
+        let mut runner = Runner::new(wf).with_max_steps(1).on_error(move |e| {
+            assert!(e.error.to_string().contains("max_steps exceeded"));
+            *count_clone.lock().unwrap() += 1;
+        });
 
         let mut ctx = Ctx::new();
         let _ = runner.run(S(0), &mut ctx);
@@ -446,10 +442,7 @@ mod tests {
             .unwrap();
 
         let mut runner = Runner::new(wf).on_step(move |e| {
-            steps_clone
-                .lock()
-                .unwrap()
-                .push((e.step_number, e.retries));
+            steps_clone.lock().unwrap().push((e.step_number, e.retries));
         });
 
         let mut ctx = Ctx::new();
@@ -602,7 +595,10 @@ mod tests {
         // retry_once_then_continue fires twice (retry then continue), done_agent fires once
         assert_eq!(events.len(), 3);
         // done_agent should have retries=0 (reset after transition)
-        let done_event = events.iter().find(|(name, _)| name == "done_agent").unwrap();
+        let done_event = events
+            .iter()
+            .find(|(name, _)| name == "done_agent")
+            .unwrap();
         assert_eq!(done_event.1, 0);
     }
 }

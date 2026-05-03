@@ -1,4 +1,4 @@
-use agent_line::{Agent, Ctx, Outcome, Runner, StepResult, Workflow};
+use agent_line::{Agent, Ctx, LlmConfig, Outcome, Runner, StepResult, Workflow};
 use std::thread;
 use std::time::Duration;
 
@@ -81,7 +81,16 @@ impl Agent<BriefingState> for FetchEmail {
     }
 }
 
-struct Summarize;
+struct Summarize {
+    llm: LlmConfig,
+}
+
+impl Summarize {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<BriefingState> for Summarize {
     fn name(&self) -> &'static str {
         "summarize"
@@ -94,8 +103,9 @@ impl Agent<BriefingState> for Summarize {
             state.weather, state.calendar, state.emails
         );
 
-        let response = ctx
-            .llm()
+        let response = self
+            .llm
+            .request()
             .system(
                 "You are a personal assistant. Produce a concise daily briefing \
                  from the provided weather, calendar, and email data. \
@@ -116,11 +126,13 @@ impl Agent<BriefingState> for Summarize {
 fn main() {
     let mut ctx = Ctx::new();
 
+    let llm = LlmConfig::from_env();
+
     let wf = Workflow::builder("daily-briefing")
         .register(FetchWeather)
         .register(FetchCalendar)
         .register(FetchEmail)
-        .register(Summarize)
+        .register(Summarize::new(llm))
         .start_at("fetch_weather")
         .then("fetch_calendar")
         .then("fetch_email")
