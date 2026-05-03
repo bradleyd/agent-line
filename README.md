@@ -22,9 +22,13 @@ impl Agent<State> for AddOne {
 
 fn main() {
     let mut ctx = Ctx::new();
-    let mut agent = AddOne;
-    let (state, _) = agent.run(State { n: 1 }, &mut ctx).unwrap();
-    println!("n = {}", state.n); // n = 2
+    let wf = Workflow::builder("demo")
+        .register(AddOne)
+        .build()
+        .unwrap();
+
+    let result = Runner::new(wf).run(State { n: 0 }, &mut ctx).unwrap();
+    println!("n = {}", result.n); // n = 1
 }
 ```
 
@@ -76,27 +80,62 @@ ctx.clear();
 
 ## LLM Integration
 
-`Ctx` includes a built-in LLM client that supports Ollama, OpenAI-compatible APIs (OpenRouter, etc.), and the Anthropic API.
+Agents that need an LLM hold their own `LlmConfig` and call `LlmConfig::request()` to start a chat request. Supports Ollama, OpenAI-compatible APIs (OpenRouter, etc.), and the Anthropic API.
 
 ```rust
-let response = ctx.llm()
-    .system("You are a helpful assistant.")
-    .user("Summarize this text: ...")
-    .send()?;
+use agent_line::{Agent, Ctx, LlmConfig, Outcome, StepResult};
+
+#[derive(Clone)]
+struct State {
+    text: String,
+    summary: String,
+}
+
+struct Summarize {
+    llm: LlmConfig,
+}
+
+impl Summarize {
+    fn new(llm: LlmConfig) -> Self { Self { llm } }
+}
+
+impl Agent<State> for Summarize {
+    fn name(&self) -> &'static str { "summarize" }
+    fn run(&mut self, mut state: State, _ctx: &mut Ctx) -> StepResult<State> {
+        state.summary = self.llm.request()
+            .system("Summarize the input in one sentence.")
+            .user(&state.text)
+            .send()?;
+        Ok((state, Outcome::Done))
+    }
+}
+```
+
+In `main`, build a config and inject it into the agent:
+
+```rust
+let llm = LlmConfig::from_env();   // reads AGENT_LINE_* env vars
+
+let wf = Workflow::builder("summarize")
+    .register(Summarize::new(llm))
+    .build()?;
 ```
 
 ### Configuration
 
-Set via environment variables:
+`LlmConfig::from_env()` reads:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AGENT_LINE_PROVIDER` | `ollama` | LLM provider: `ollama`, `openai`, or `anthropic` |
 | `AGENT_LINE_LLM_URL` | `http://localhost:11434` | LLM API base URL |
 | `AGENT_LINE_MODEL` | `llama3.1:8b` | Model name |
-| `AGENT_LINE_NUM_CTX` | `4096` | Context window size |
+| `AGENT_LINE_NUM_CTX` | `4096` | Ollama context window size (`options.num_ctx`) |
+| `AGENT_LINE_MAX_TOKENS` | value of `AGENT_LINE_NUM_CTX` | OpenAI/Anthropic `max_tokens` cap on the response |
 | `AGENT_LINE_API_KEY` | (none) | API key (required for remote providers) |
-| `AGENT_LINE_DEBUG` | (unset) | Set to any value to log config at startup and LLM requests/responses to stderr |
+| `AGENT_LINE_DEBUG` | (unset) | Set to any value to log the resolved config and LLM requests/responses to stderr |
+
+For explicit configuration without environment variables, use `LlmConfig::builder()` instead.
 
 ### Provider examples
 
@@ -104,6 +143,8 @@ Set via environment variables:
 ```sh
 export AGENT_LINE_MODEL=llama3.1:8b
 ```
+
+Requests to Ollama send `"think": false` so thinking-capable models (Qwen 3, etc.) skip the `<think>...</think>` reasoning block before the response. This is the default for latency reasons; thinking can otherwise add minutes per request. Models without thinking support ignore the field.
 
 **OpenRouter:**
 ```sh
@@ -120,6 +161,93 @@ export AGENT_LINE_LLM_URL=https://api.anthropic.com
 export AGENT_LINE_MODEL=claude-sonnet-4-20250514
 export AGENT_LINE_API_KEY=sk-ant-...
 ```
+
+### Multiple models per workflow
+
+Give each agent its own `LlmConfig`. A cheap local model handles routine extraction; a stronger remote model handles the harder reasoning step:
+
+```rust
+use agent_line::{Agent, Ctx, LlmConfig, Outcome, Provider, Runner, StepResult, Workflow};
+
+#[derive(Clone)]
+struct Draft {
+    body: String,
+    notes: String,
+    review: String,
+}
+
+struct Researcher { llm: LlmConfig }
+
+impl Researcher {
+    fn new(llm: LlmConfig) -> Self { Self { llm } }
+}
+
+impl Agent<Draft> for Researcher {
+    fn name(&self) -> &'static str { "researcher" }
+    fn run(&mut self, mut draft: Draft, _ctx: &mut Ctx) -> StepResult<Draft> {
+        draft.notes = self.llm.request()
+            .system("Extract the three key claims from the draft, one per line.")
+            .user(&draft.body)
+            .send()?;
+        Ok((draft, Outcome::Continue))
+    }
+}
+
+struct Reviewer { llm: LlmConfig }
+
+impl Reviewer {
+    fn new(llm: LlmConfig) -> Self { Self { llm } }
+}
+
+impl Agent<Draft> for Reviewer {
+    fn name(&self) -> &'static str { "reviewer" }
+    fn run(&mut self, mut draft: Draft, _ctx: &mut Ctx) -> StepResult<Draft> {
+        draft.review = self.llm.request()
+            .system("Critique the draft against its own claims. Be specific.")
+            .user(format!("Claims:\n{}\n\nDraft:\n{}", draft.notes, draft.body))
+            .send()?;
+        Ok((draft, Outcome::Done))
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cheap = LlmConfig::builder()
+        .provider(Provider::Ollama)
+        .base_url("http://localhost:11434")
+        .model("qwen3:8b")
+        .build()?;
+
+    let strong = LlmConfig::builder()
+        .provider(Provider::Anthropic)
+        .base_url("https://api.anthropic.com")
+        .model("claude-sonnet-4-20250514")
+        .api_key(std::env::var("ANTHROPIC_API_KEY")?)
+        .max_tokens(1200)
+        .build()?;
+
+    let mut ctx = Ctx::new();
+    let wf = Workflow::builder("review")
+        .register(Researcher::new(cheap))
+        .register(Reviewer::new(strong))
+        .start_at("researcher")
+        .then("reviewer")
+        .build()?;
+
+    Runner::new(wf).run(
+        Draft {
+            body: "Rust ownership lets you pass a value or borrow it...".into(),
+            notes: String::new(),
+            review: String::new(),
+        },
+        &mut ctx,
+    )?;
+    Ok(())
+}
+```
+
+Required `LlmConfig` fields: `provider`, `base_url`, `model`. Optional: `api_key`, `num_ctx` for Ollama requests, and `max_tokens` for OpenAI-compatible and Anthropic requests. `LlmConfig::build()` returns an error if a required field is missing.
+
+See `examples/multi_model.rs` for a small pipeline and `examples/incident_investigation/` for a multi-file incident correlation example.
 
 ## Outcomes
 
@@ -311,6 +439,8 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 | workflow | `cargo run --example workflow` | Linear workflow with chained agents |
 | edit_loop | `cargo run --example edit_loop` | Validate/fix loop with retry |
 | newsletter | `cargo run --example newsletter` | Multi-phase LLM workflow (needs Ollama) |
+| multi_model | `cargo run --example multi_model` | Pipeline with different models per agent: cheap step uses local Ollama (`qwen3:8b`), strong step uses Anthropic (needs `ANTHROPIC_API_KEY`) |
+| incident_investigation | `cargo run --example incident_investigation` | Multi-file incident correlation workflow with a fast small Ollama model for triage and a heavier Ollama model for the report. `main.rs` shows commented-out OpenRouter and Anthropic alternatives |
 | coder | `cargo run --example coder` | Code generation with test loop (needs Ollama) |
 | assistant | `cargo run --example assistant` | Personal assistant pipeline with tracing (needs Ollama) |
 | otel_tracing | `cargo run --example otel_tracing` | OTEL span export from `on_step`/`on_error` hooks |
@@ -319,6 +449,9 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 ## TODO
 
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
+- [ ] Better LLM error output. Today a non-2xx response surfaces as `transient: llm request failed: http status: 404` with no body. Read the response body and surface the underlying message (e.g. Ollama's "model X not found") so users can act on it.
+- [ ] Expose Ollama thinking mode as an opt-in. The library currently hardcodes `"think": false` for the Ollama provider so thinking models (Qwen 3, etc.) skip the `<think>` block by default. Add a way to re-enable it (likely a method on `LlmConfigBuilder`) for users who want the quality bump on hard reasoning tasks and can wait.
+- [ ] Switch `tools::file::*` and `tools::command::run_cmd_in_dir` path parameters from `&str` to `impl AsRef<Path>` to match the Rust stdlib convention (`std::fs::read_to_string`, etc.). Source-compatible for `&str` callers; `PathBuf` callers stop having to round-trip through `String`. Separately consider whether `list_dir` / `find_files` should return `Vec<PathBuf>` instead of `Vec<String>` (breaking).
 
 ## Dependencies
 

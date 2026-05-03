@@ -5,8 +5,9 @@
 //
 // Pipeline per thread: researcher -> writer -> editor -> (loop back to writer if needed) -> done
 //
-// All data flows through the state struct. Swap the stubs for ctx.llm() calls
-// to use a real LLM.
+// All data flows through the state struct. To use a real LLM, give each
+// agent an `llm: LlmConfig` field and replace the stubs with
+// `self.llm.request().system(...).user(...).send()?` calls.
 //
 // Run: cargo run --example parallel
 
@@ -46,8 +47,8 @@ impl ArticleState {
 // ---------------------------------------------------------------------------
 
 /// Gathers background material on the topic.
-/// In a real app this would use tools::http for web search, then ctx.llm()
-/// to summarize the findings into research notes.
+/// In a real app this would use tools::http for web search, then call
+/// self.llm.request() to summarize the findings into research notes.
 struct Researcher;
 impl Agent<ArticleState> for Researcher {
     fn name(&self) -> &'static str {
@@ -103,8 +104,8 @@ impl Agent<ArticleState> for Writer {
             ));
 
             // Stub for rewrite pass
-            // In a real app:
-            // let response = ctx.llm()
+            // In a real app (after adding `llm: LlmConfig` to Writer):
+            // let response = self.llm.request()
             //     .system(&format!(
             //         "You are a writer. Rewrite this article incorporating the editor's feedback.\n\
             //          Guidelines: {}\n\
@@ -131,8 +132,8 @@ impl Agent<ArticleState> for Writer {
             ));
 
             // Stub for first draft
-            // In a real app:
-            // let response = ctx.llm()
+            // In a real app (after adding `llm: LlmConfig` to Writer):
+            // let response = self.llm.request()
             //     .system(&format!(
             //         "You are a writer. Write a short article based on the research notes.\n\
             //          Guidelines: {}",
@@ -165,8 +166,8 @@ impl Agent<ArticleState> for Editor {
         ctx.log(format!("reviewing rev {}: {}", state.revision, state.topic));
 
         // Stub: check the draft against guidelines
-        // In a real app:
-        // let response = ctx.llm()
+        // In a real app (after adding `llm: LlmConfig` to Editor):
+        // let response = self.llm.request()
         //     .system(&format!(
         //         "You are an editor. Review this article against the guidelines.\n\
         //          Guidelines: {}\n\n\
