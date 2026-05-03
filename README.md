@@ -451,6 +451,7 @@ The built-in `with_tracing()` helper remains for quick local debugging, while ho
 - [ ] Rename `find_files` to `glob` or add proper glob pattern support
 - [ ] Better LLM error output. Today a non-2xx response surfaces as `transient: llm request failed: http status: 404` with no body. Read the response body and surface the underlying message (e.g. Ollama's "model X not found") so users can act on it.
 - [ ] Expose Ollama thinking mode as an opt-in. The library currently hardcodes `"think": false` for the Ollama provider so thinking models (Qwen 3, etc.) skip the `<think>` block by default. Add a way to re-enable it (likely a method on `LlmConfigBuilder`) for users who want the quality bump on hard reasoning tasks and can wait.
+- [ ] Switch `tools::file::*` and `tools::command::run_cmd_in_dir` path parameters from `&str` to `impl AsRef<Path>` to match the Rust stdlib convention (`std::fs::read_to_string`, etc.). Source-compatible for `&str` callers; `PathBuf` callers stop having to round-trip through `String`. Separately consider whether `list_dir` / `find_files` should return `Vec<PathBuf>` instead of `Vec<String>` (breaking).
 
 ## Dependencies
 
