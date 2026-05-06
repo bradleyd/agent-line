@@ -1,8 +1,8 @@
 use agent_line::{Agent, Ctx, ErrorEvent, Outcome, Runner, StepEvent, StepResult, Workflow};
 use opentelemetry::trace::{Span, Status, TraceContextExt, Tracer};
-use opentelemetry::{global, Context, KeyValue};
-use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry::{Context, KeyValue, global};
 use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 
 #[derive(Clone, Debug)]
 struct DraftState {

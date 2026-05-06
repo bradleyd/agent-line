@@ -1,4 +1,4 @@
-use agent_line::{Agent, Ctx, Outcome, Runner, StepResult, Workflow};
+use agent_line::{Agent, Ctx, LlmConfig, Outcome, Runner, StepResult, Workflow};
 
 // ---------------------------------------------------------------------------
 // State types
@@ -44,13 +44,22 @@ impl Agent<TopicState> for TopicSearcher {
     }
 }
 
-struct TopicPicker;
+struct TopicPicker {
+    llm: LlmConfig,
+}
+
+impl TopicPicker {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<TopicState> for TopicPicker {
     fn name(&self) -> &'static str {
         "topic_picker"
     }
     fn run(&mut self, mut state: TopicState, ctx: &mut Ctx) -> StepResult<TopicState> {
-        let response = ctx.llm()
+        let response = self.llm.request()
             .system("You are a newsletter curator. Pick exactly 3 topics. Return one per line, nothing else.")
             .user(format!("Choose from:\n{}", state.topics.join("\n")))
             .send()?;
@@ -107,15 +116,25 @@ impl Agent<ArticleState> for ArticleWriter {
     }
 }
 
-struct ArticleValidator;
+struct ArticleValidator {
+    llm: LlmConfig,
+}
+
+impl ArticleValidator {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<ArticleState> for ArticleValidator {
     fn name(&self) -> &'static str {
         "article_validator"
     }
     fn run(&mut self, state: ArticleState, ctx: &mut Ctx) -> StepResult<ArticleState> {
         // use store k/v to pull in validation rules and pass them to the llm
-        let response = ctx
-            .llm()
+        let response = self
+            .llm
+            .request()
             .system("You are a strict editor. List any errors. Say PASS if none.")
             .user(&state.draft)
             .send()?;
@@ -130,15 +149,25 @@ impl Agent<ArticleState> for ArticleValidator {
     }
 }
 
-struct ArticleFixer;
+struct ArticleFixer {
+    llm: LlmConfig,
+}
+
+impl ArticleFixer {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<ArticleState> for ArticleFixer {
     fn name(&self) -> &'static str {
         "article_fixer"
     }
     fn run(&mut self, mut state: ArticleState, ctx: &mut Ctx) -> StepResult<ArticleState> {
         let errors = ctx.get("errors").unwrap_or("no errors found").to_string();
-        let response = ctx
-            .llm()
+        let response = self
+            .llm
+            .request()
             .system("You are a writer. Rewrite the article fixing only the listed errors.")
             .user(format!("Errors:\n{errors}\n\nArticle:\n{}", state.draft))
             .send()?;
@@ -154,13 +183,14 @@ impl Agent<ArticleState> for ArticleFixer {
 
 fn main() {
     let mut ctx = Ctx::new();
+    let llm = LlmConfig::from_env();
 
     // could populate ctx.store with some writing rules or could read in a markdown skill and pass
     // that into the agent.
     // Phase 1: find topics
     let topic_wf = Workflow::builder("find-topics")
         .register(TopicSearcher)
-        .register(TopicPicker)
+        .register(TopicPicker::new(llm.clone()))
         .start_at("topic_searcher")
         .then("topic_picker")
         .build()
@@ -188,8 +218,8 @@ fn main() {
     // Phase 2: write one article per topic
     let article_wf = Workflow::builder("write-article")
         .register(ArticleWriter)
-        .register(ArticleValidator)
-        .register(ArticleFixer)
+        .register(ArticleValidator::new(llm.clone()))
+        .register(ArticleFixer::new(llm))
         .start_at("article_writer")
         .then("article_validator")
         .build()

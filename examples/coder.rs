@@ -9,7 +9,7 @@
 // Run: cargo run --example coder
 // Requires an LLM (Ollama by default, or set AGENT_LINE_PROVIDER).
 
-use agent_line::{tools, Agent, Ctx, Outcome, Runner, StepResult, Workflow};
+use agent_line::{Agent, Ctx, LlmConfig, Outcome, Runner, StepResult, Workflow, tools};
 
 // ---------------------------------------------------------------------------
 // State
@@ -29,7 +29,16 @@ struct Task {
 // Agents
 // ---------------------------------------------------------------------------
 
-struct Planner;
+struct Planner {
+    llm: LlmConfig,
+}
+
+impl Planner {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<Task> for Planner {
     fn name(&self) -> &'static str {
         "planner"
@@ -37,8 +46,9 @@ impl Agent<Task> for Planner {
     fn run(&mut self, mut state: Task, ctx: &mut Ctx) -> StepResult<Task> {
         state.code = tools::read_file(&state.file_path).unwrap_or_default();
 
-        let plan = ctx
-            .llm()
+        let plan = self
+            .llm
+            .request()
             .system(
                 "You are a senior developer. Create a brief implementation plan. \
                  List the specific changes needed. Be concise. \
@@ -62,7 +72,16 @@ impl Agent<Task> for Planner {
     }
 }
 
-struct Coder;
+struct Coder {
+    llm: LlmConfig,
+}
+
+impl Coder {
+    fn new(llm: LlmConfig) -> Self {
+        Self { llm }
+    }
+}
+
 impl Agent<Task> for Coder {
     fn name(&self) -> &'static str {
         "coder"
@@ -73,7 +92,8 @@ impl Agent<Task> for Coder {
         let response = if is_fix {
             ctx.log(format!("coder: fixing (attempt {})", state.attempts));
 
-            ctx.llm()
+            self.llm
+                .request()
                 .system(
                     "You are a developer. Fix the code based on the test failures. \
                      Return ONLY the complete fixed file contents, no explanation. \
@@ -89,7 +109,8 @@ impl Agent<Task> for Coder {
             let plan = ctx.get("plan").unwrap_or("no plan found").to_string();
             ctx.log("coder: writing initial code");
 
-            ctx.llm()
+            self.llm
+                .request()
                 .system(
                     "You are a developer. Write the code based on the plan. \
                      Return ONLY the complete file contents, no explanation. \
@@ -168,9 +189,11 @@ fn main() {
     let mut ctx = Ctx::new();
     ctx.set("manifest_path", &manifest);
 
+    let llm = LlmConfig::from_env();
+
     let wf = Workflow::builder("coding-agent")
-        .register(Planner)
-        .register(Coder)
+        .register(Planner::new(llm.clone()))
+        .register(Coder::new(llm))
         .register(Tester)
         .start_at("planner")
         .then("coder")
