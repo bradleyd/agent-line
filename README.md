@@ -4,6 +4,10 @@ A batteries-included Rust library for building agent workflows. Sync-only, opini
 
 Define agents, wire them into workflows, and let the runner execute them. Agents communicate through shared context and control flow with outcomes like `Continue`, `Next`, `Retry`, and `Done`.
 
+[![Crates.io](https://img.shields.io/crates/v/agent-line.svg)](https://crates.io/crates/agent-line)
+[![docs.rs](https://docs.rs/agent-line/badge.svg)](https://docs.rs/agent-line)
+[![License](https://img.shields.io/crates/l/agent-line.svg)](LICENSE)
+
 ## Quick Start
 
 ```rust
@@ -140,6 +144,7 @@ For explicit configuration without environment variables, use `LlmConfig::builde
 ### Provider examples
 
 **Ollama (default, no API key needed):**
+
 ```sh
 export AGENT_LINE_MODEL=llama3.1:8b
 ```
@@ -147,6 +152,7 @@ export AGENT_LINE_MODEL=llama3.1:8b
 Requests to Ollama send `"think": false` so thinking-capable models (Qwen 3, etc.) skip the `<think>...</think>` reasoning block before the response. This is the default for latency reasons; thinking can otherwise add minutes per request. Models without thinking support ignore the field.
 
 **OpenRouter:**
+
 ```sh
 export AGENT_LINE_PROVIDER=openai
 export AGENT_LINE_LLM_URL=https://openrouter.ai/api
@@ -155,6 +161,7 @@ export AGENT_LINE_API_KEY=sk-or-...
 ```
 
 **Anthropic:**
+
 ```sh
 export AGENT_LINE_PROVIDER=anthropic
 export AGENT_LINE_LLM_URL=https://api.anthropic.com
