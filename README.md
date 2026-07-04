@@ -300,8 +300,13 @@ Standalone utility functions for common agent tasks. Import with `use agent_line
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `http_get` | `(url: &str) -> Result<String, StepError>` | GET request, returns body as string |
+| `http_get_with_headers` | `(url: &str, headers: &[(&str, &str)]) -> Result<String, StepError>` | GET with custom headers |
 | `http_post` | `(url: &str, body: &str) -> Result<String, StepError>` | POST with string body |
+| `http_post_with_headers` | `(url: &str, body: &str, headers: &[(&str, &str)]) -> Result<String, StepError>` | POST with string body and custom headers |
 | `http_post_json` | `(url: &str, body: &Value) -> Result<String, StepError>` | POST with JSON body |
+| `http_post_json_with_headers` | `(url: &str, body: &Value, headers: &[(&str, &str)]) -> Result<String, StepError>` | POST with JSON body and custom headers |
+
+Headers are passed as `(name, value)` pairs, e.g. `&[("Authorization", "Bearer token")]`. Every request also sets a `User-Agent: agent-line` header. The plain functions are shorthand for the `_with_headers` variants with no extra headers.
 
 ### Parsing
 
