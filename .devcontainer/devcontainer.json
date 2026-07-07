@@ -1,0 +1,11 @@
+{
+  "name": "rust-nvim",
+  "image": "mcr.microsoft.com/devcontainers/rust:latest",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/setup-nvim.sh",
+  "containerEnv": {
+    "EDITOR": "nvim"
+  }
+}
