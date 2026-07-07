@@ -22,12 +22,31 @@ sudo apt-get update && sudo apt-get install -y ripgrep fd-find unzip
 # fd ships as fdfind on Debian/Ubuntu; LazyVim looks for `fd`
 sudo ln -sf "$(which fdfind)" /usr/local/bin/fd 2>/dev/null || true
 
-# Your LazyVim config (the starter, customized)
-if [ ! -d "$HOME/.config/nvim" ]; then
-  git clone https://github.com/bradleydsmith/nvim-config.git "$HOME/.config/nvim"
-  rm -rf "$HOME/.config/nvim/.git"
-fi
+# Vanilla LazyVim starter
+git clone https://github.com/LazyVim/starter ~/.config/nvim
+rm -rf ~/.config/nvim/.git
 
-# Headless install: plugins first, then let Mason pull the Rust toolchain bits
+# Enable the Rust extra (this is what :LazyExtras would toggle)
+mkdir -p ~/.config/nvim/lua/plugins
+cat >~/.config/nvim/lua/plugins/extras.lua <<'EOF'
+return {
+  { import = "lazyvim.plugins.extras.lang.rust" },
+  { import = "lazyvim.plugins.extras.lang.toml" },
+}
+EOF
+
+# jj -> escape in insert mode
+cat >~/.config/nvim/lua/plugins/keymaps.lua <<'EOF'
+return {
+  {
+    "LazyVim/LazyVim",
+    keys = {
+      { "jj", "<Esc>", mode = "i", desc = "Escape insert mode" },
+    },
+  },
+}
+EOF
+
+# Install everything headless so first launch is ready
 nvim --headless "+Lazy! sync" +qa 2>&1 | tail -5 || true
-nvim --headless "+MasonInstall rust-analyzer codelldb" +qa 2>&1 | tail -5 || true
+nvim --headless "+MasonInstall codelldb" +qa 2>&1 | tail -5 || true
